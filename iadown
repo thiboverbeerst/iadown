@@ -1,0 +1,88 @@
+#!/bin/bash
+
+function download_files() {
+    local item="$1"
+    for ext in pdf epub; do
+        ia download "$item" --glob="*.$ext"
+    done
+}
+
+function search_and_download() {
+    local search_query="$1"
+    local items=$(ia search "$search_query" --itemlist)
+    
+    if [ -z "$items" ]; then
+        echo "No items found for query: $search_query"
+        exit 1
+    fi
+
+    for item in $items; do
+        echo "Downloading item: $item"
+        download_files "$item"
+    done
+}
+
+function download_item() {
+    local ia_identifier="$1"
+    echo "Downloading item: $ia_identifier"
+    download_files "$ia_identifier"
+}
+
+function download_collection() {
+    local collection_name="$1"
+    echo "Searching and downloading items from collection: $collection_name"
+    search_and_download "collection:$collection_name"
+}
+
+function handle_dir_identifiers() {
+    local dir="$1"
+
+    # Check if the directory exists
+    if [ ! -d "$dir" ]; then
+        echo "Directory $dir does not exist."
+        exit 1
+    fi
+
+    # Loop over each subdirectory name
+    for subdir in "$dir"/*; do
+        if [ -d "$subdir" ]; then
+            ia_identifier=$(basename "$subdir")
+            echo "Processing IA identifier: $ia_identifier"
+            
+            # Check if the identifier corresponds to a collection
+            collection_items=$(ia search "collection:$ia_identifier" --itemlist)
+            
+            if [ -z "$collection_items" ]; then
+                # Not a collection, treat as an individual item
+                download_item "$ia_identifier"
+            else
+                # It's a collection, download all items in it
+                download_collection "$ia_identifier"
+            fi
+        fi
+    done
+}
+
+# Main script logic
+if [[ "$1" == "--search" ]]; then
+    if [ -z "$2" ]; then
+        echo "Usage: iadown --search <search_query>"
+        exit 1
+    fi
+    search_and_download "$2"
+
+elif [[ "$1" == "--from-dir-identifiers" ]]; then
+    if [ -z "$2" ]; then
+        echo "Usage: iadown --from-dir-identifiers <directory>"
+        exit 1
+    fi
+    handle_dir_identifiers "$2"
+
+else
+    if [ -z "$1" ]; then
+        echo "Usage: iadown <item_name>"
+        exit 1
+    fi
+    download_files "$1"
+fi
+
